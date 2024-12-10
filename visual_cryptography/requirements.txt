@@ -1,0 +1,16 @@
+# Temel gereksinimler
+numpy>=1.21.0
+Pillow>=8.3.0
+
+# Test gereksinimleri
+pytest>=6.2.5
+pytest-cov>=2.12.0
+
+# Geliştirme araçları
+black>=21.5b2        # Kod formatlama
+flake8>=3.9.2        # Kod analizi
+isort>=5.9.1         # Import düzenleme
+
+# Dokümantasyon
+sphinx>=4.0.2        # Dokümantasyon oluşturma
+sphinx-rtd-theme>=0.5.2  # Dokümantasyon teması
