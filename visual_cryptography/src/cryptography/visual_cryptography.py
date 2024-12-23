@@ -16,9 +16,11 @@ class VisualCryptography:
         self.shares = []
 
     def apply_dithering(self):
-        """Görüntüye Floyd-Steinberg dithering uygula"""
-        dithering = FloydSteinbergDithering()
-        self.dithered_image = dithering.apply(self.original_image)
+        """Görüntüye threshold uygula"""
+        img_array = np.array(self.original_image)
+        threshold = 128
+        img_array = ((img_array > threshold) * 255).astype(np.uint8)
+        self.dithered_image = Image.fromarray(img_array)
         return self.dithered_image
 
     def generate_shares(self):
@@ -26,63 +28,84 @@ class VisualCryptography:
         if self.dithered_image is None:
             self.apply_dithering()
 
-        # Her pay için 2x boyutlu boş görüntüler oluştur
-        share1 = np.zeros((self.height*2, self.width*2), dtype=np.uint8)
-        share2 = np.zeros((self.height*2, self.width*2), dtype=np.uint8)
-        share3 = np.zeros((self.height*2, self.width*2), dtype=np.uint8)
+        # RGBA formatında payları oluştur (4 kanal: R,G,B,A)
+        share1 = np.zeros((self.height*2, self.width*2, 4), dtype=np.uint8)
+        share2 = np.zeros((self.height*2, self.width*2, 4), dtype=np.uint8)
+        share3 = np.zeros((self.height*2, self.width*2, 4), dtype=np.uint8)
 
         binary_image = np.array(self.dithered_image) // 255
 
+        # Temel desen matrisleri - siyah ve transparent için
+        black_subpixels = [
+            [[1,1,0,0], [0,0,1,1], [1,1,0,0]],  # Siyah piksel için desen 1
+            [[0,0,1,1], [1,1,0,0], [0,0,1,1]]   # Siyah piksel için desen 2
+        ]
+        
+        white_subpixels = [
+            [[1,0,0,1], [0,1,1,0], [1,0,0,1]],  # Beyaz (transparent) piksel için desen 1
+            [[0,1,1,0], [1,0,0,1], [0,1,1,0]]   # Beyaz (transparent) piksel için desen 2
+        ]
+
         for y in range(self.height):
             for x in range(self.width):
-                if binary_image[y, x] == 1:  # Beyaz piksel
-                    # Beyaz piksel için rastgele bir desen seç
-                    if random.random() < 0.5:
-                        share1[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 0], [0, 255]])
-                        share2[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 255], [255, 0]])
-                        share3[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 0], [0, 255]])
-                    else:
-                        share1[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 255], [255, 0]])
-                        share2[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 0], [0, 255]])
-                        share3[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 255], [255, 0]])
+                y2, x2 = y*2, x*2
+                pattern_idx = random.randint(0, 1)
+                
+                if binary_image[y, x] == 1:  # Beyaz piksel (transparent olacak)
+                    patterns = white_subpixels[pattern_idx]
                 else:  # Siyah piksel
-                    # Siyah piksel için rastgele bir desen seç
-                    pattern = random.randint(0, 3)
-                    if pattern == 0:
-                        share1[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 255], [0, 0]])
-                        share2[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 0], [255, 255]])
-                        share3[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 255], [0, 0]])
-                    elif pattern == 1:
-                        share1[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 0], [255, 255]])
-                        share2[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 255], [0, 0]])
-                        share3[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 0], [255, 255]])
-                    elif pattern == 2:
-                        share1[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 0], [255, 0]])
-                        share2[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 255], [0, 255]])
-                        share3[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 0], [255, 0]])
-                    else:
-                        share1[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 255], [0, 255]])
-                        share2[y*2:y*2+2, x*2:x*2+2] = np.array([[255, 0], [255, 0]])
-                        share3[y*2:y*2+2, x*2:x*2+2] = np.array([[0, 255], [0, 255]])
+                    patterns = black_subpixels[pattern_idx]
+                
+                # Her pay için 2x2 alt pikselleri ayarla
+                for i in range(2):
+                    for j in range(2):
+                        # Siyah nokta için [0,0,0,255], transparent için [0,0,0,0]
+                        alpha_value = 255 if patterns[0][i*2+j] else 0
+                        share1[y2+i,x2+j] = [0,0,0,alpha_value]
+                        
+                        alpha_value = 255 if patterns[1][i*2+j] else 0
+                        share2[y2+i,x2+j] = [0,0,0,alpha_value]
+                        
+                        alpha_value = 255 if patterns[2][i*2+j] else 0
+                        share3[y2+i,x2+j] = [0,0,0,alpha_value]
 
         self.shares = [
-            Image.fromarray(share1),
-            Image.fromarray(share2),
-            Image.fromarray(share3)
+            Image.fromarray(share1, 'RGBA'),
+            Image.fromarray(share2, 'RGBA'),
+            Image.fromarray(share3, 'RGBA')
         ]
         return self.shares
+
+    def create_pattern(self, pattern):
+        """2x2 desenini RGBA formatına dönüştür"""
+        rgba_pattern = np.zeros((2, 2, 4), dtype=np.uint8)
+        for i in range(2):
+            for j in range(2):
+                if pattern[i][j] == 1:
+                    # Siyah nokta: RGB(0,0,0) ve alpha=255
+                    rgba_pattern[i,j] = [0, 0, 0, 255]
+                else:
+                    # Transparent: RGB(0,0,0) ve alpha=0
+                    rgba_pattern[i,j] = [0, 0, 0, 0]
+        return rgba_pattern
 
     def combine_shares(self):
         """Payları birleştirerek orijinal görüntüyü elde et"""
         if not self.shares:
             raise ValueError("Önce paylar oluşturulmalı!")
 
-        # Payları numpy array'e dönüştür
-        share_arrays = [np.array(share) for share in self.shares]
+        # Payları numpy array'e dönüştür (sadece alpha kanalını kullan)
+        share_arrays = [np.array(share)[:,:,3] == 255 for share in self.shares]
         
-        # Payları mantıksal VEYA (OR) işlemi ile birleştir
+        # Mantıksal AND işlemi ile payları birleştir (fiziksel üst üste koyma işlemini simüle et)
         combined = share_arrays[0]
         for share in share_arrays[1:]:
-            combined = np.bitwise_or(combined, share)
+            combined = np.logical_and(combined, share)
         
-        return Image.fromarray(combined)
+        # RGBA formatında sonuç oluştur
+        result = np.zeros((combined.shape[0], combined.shape[1], 4), dtype=np.uint8)
+        # Siyah noktalar için alpha=255, diğerleri için alpha=0
+        result[combined] = [0, 0, 0, 255]  # Siyah noktalar
+        result[~combined] = [255, 255, 255, 255]   # Beyaz alanlar
+        
+        return Image.fromarray(result, 'RGBA')
